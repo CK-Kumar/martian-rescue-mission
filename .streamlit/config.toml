@@ -1,0 +1,23 @@
+# Mars by day: butterscotch dust sky. Accent is the blue of a Martian sunset.
+[theme]
+base = "light"
+primaryColor = "#3E6FA8"
+backgroundColor = "#F3EADB"
+secondaryBackgroundColor = "#FBF6EE"
+textColor = "#2A2320"
+font = "'Public Sans':https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&display=swap"
+headingFont = "'Barlow Condensed':https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&display=swap"
+
+# The sidebar is the mission control desk: dark, so it reads as controls,
+# not as part of the story.
+[theme.sidebar]
+backgroundColor = "#241D1A"
+secondaryBackgroundColor = "#352B26"
+textColor = "#F1E6D4"
+primaryColor = "#7FA6DA"
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false

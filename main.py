@@ -30,24 +30,13 @@ def llm_totals(rows):
     }
 
 
-def main():
-    # Usage: uv run main.py haiku_solo --max-sols 3 --track
-    parser = argparse.ArgumentParser()
-    parser.add_argument("crew", nargs="?", default="do_nothing", choices=list(CREWS) + list(LLM_CREWS))
-    # Off by default so test runs don't clutter MLflow next to real results.
-    parser.add_argument("--track", action="store_true", help="record this run in MLflow")
-    # Stop early to test cheaply; 0 = play until dead or rescued.
-    parser.add_argument("--max-sols", type=int, default=0)
-    # Same seed -> same Mars (storm timing), so crews can be compared fairly.
-    parser.add_argument("--seed", type=int, default=42)
-    args = parser.parse_args()
-    crew_name = args.crew
-    seed = args.seed
+def run_game(crew_name, seed, max_sols=0, track=False, on_sol=None):
+    # Plays one game and writes its log. on_sol(row) is called after each sol,
+    # so the terminal can print and the viewer can show live progress.
     world = new_world(seed)
     agent = new_agent(LLM_CREWS[crew_name]) if crew_name in LLM_CREWS else None
     log_file, log_path = open_log(crew_name, seed)
 
-    print(f"crew: {crew_name}")
     rows = []
     overnight = []  # what the last sol reported, shown to the agent next turn
     while not world["dead"] and not world["rescued"]:
@@ -68,18 +57,9 @@ def main():
         row["water"] = world["water"]["level"]
         rows.append(row)
         write_line(log_file, row)
-
-        # Round only for display; the log keeps full precision.
-        weather = "STORM" if dust > 0 else "clear"
-        print(f"sol {sol:2} | {weather} | o2 {row['o2']:5.2f} | water {row['water']:6.2f} | {row['messages']}")
-        if agent:
-            for call in turn["calls"]:
-                if call["reasoning"].strip():
-                    print(f"         think: {call['reasoning'].strip()[:200]}".replace("\n", " "))
-            for a in turn["actions"]:
-                print(f"         did:   {a['action']} -> {a['message']}")
-            print(f"         note:  {turn['log_note'][:150]}".replace("\n", " "))
-        if args.max_sols and len(rows) >= args.max_sols:
+        if on_sol:
+            on_sol(row)
+        if max_sols and len(rows) >= max_sols:
             break
 
     commit, dirty = git_info()
@@ -88,7 +68,7 @@ def main():
     elif world["rescued"]:
         outcome = "rescued"
     else:
-        outcome = "stopped"  # --max-sols cut the game short
+        outcome = "stopped"  # max_sols cut the game short
     result = {
         "result": outcome,
         "sol": world["sol"],
@@ -102,10 +82,40 @@ def main():
     }
     write_line(log_file, result)
     log_file.close()
-    if args.track:
+    if track:
         record_run(crew_name, seed, rows, result, log_path)
+    return result, log_path
 
-    print(f"{outcome.upper()} on sol {world['sol']}" + (f": {world['cause_of_death']}" if world["dead"] else ""))
+
+def print_sol(row):
+    # Round only for display; the log keeps full precision.
+    weather = "STORM" if row["dust"] > 0 else "clear"
+    print(f"sol {row['sol']:2} | {weather} | o2 {row['o2']:5.2f} | water {row['water']:6.2f} | {row['messages']}")
+    if "llm_calls" in row:
+        for call in row["llm_calls"]:
+            if call["reasoning"].strip():
+                print(f"         think: {call['reasoning'].strip()[:200]}".replace("\n", " "))
+        for a in row["actions"]:
+            print(f"         did:   {a['action']} -> {a['message']}")
+        print(f"         note:  {row['log_note'][:150]}".replace("\n", " "))
+
+
+def main():
+    # Usage: uv run main.py haiku_solo --max-sols 3 --track
+    parser = argparse.ArgumentParser()
+    parser.add_argument("crew", nargs="?", default="do_nothing", choices=list(CREWS) + list(LLM_CREWS))
+    # Off by default so test runs don't clutter MLflow next to real results.
+    parser.add_argument("--track", action="store_true", help="record this run in MLflow")
+    # Stop early to test cheaply; 0 = play until dead or rescued.
+    parser.add_argument("--max-sols", type=int, default=0)
+    # Same seed -> same Mars (storm timing), so crews can be compared fairly.
+    parser.add_argument("--seed", type=int, default=42)
+    args = parser.parse_args()
+
+    print(f"crew: {args.crew}")
+    result, log_path = run_game(args.crew, args.seed, args.max_sols, args.track, on_sol=print_sol)
+
+    print(f"{result['result'].upper()} on sol {result['sol']}" + (f": {result['cause']}" if result["cause"] else ""))
     if "model_calls" in result:
         print(f"model calls {result['model_calls']} | tokens in {result['tokens_in']}"
               f" (cached {result['cache_read']}) out {result['tokens_out']}"

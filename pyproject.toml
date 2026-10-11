@@ -8,4 +8,10 @@ dependencies = [
     "anthropic>=1.13.0",
     "mlflow>=3.17.0",
     "python-dotenv>=1.2.4",
+    "streamlit>=1.65.0",
+]
+
+[dependency-groups]
+dev = [
+    "playwright>=1.63.0",
 ]
