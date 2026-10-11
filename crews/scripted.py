@@ -14,7 +14,29 @@ def repair_only(world):
     return []
 
 
+def perfect(world):
+    # The best plan we know, not proven optimal. Sol 3: fix the leak and find
+    # both hidden resources. Sunny sols: drill to fill the water tank before
+    # the storm. Storm sols: battery covers the recycler's 11 kWh shortfall.
+    sol = world["sol"]
+    storm = world["storm"]
+    in_storm = storm["start"] <= sol < storm["start"] + storm["sols"]
+    actions = []
+    if sol == 3:
+        actions += [
+            {"type": "repair", "target": "oxygen_leak"},
+            {"type": "inspect", "target": "rover"},
+            {"type": "inspect", "target": "ground"},
+        ]
+    if sol >= 3 and not in_storm:
+        actions.append({"type": "drill_ice", "kg": 10})
+    if in_storm:
+        actions.append({"type": "use_battery", "kwh": 11})
+    return actions
+
+
 CREWS = {
     "do_nothing": do_nothing,
     "repair_only": repair_only,
+    "perfect": perfect,
 }
