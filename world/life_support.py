@@ -43,3 +43,13 @@ def leak_o2(world):
         world["oxygen"]["leak"] = True
     if world["oxygen"]["leak"]:
         world["oxygen"]["level"] -= LEAK_KG_PER_SOL
+
+
+def run_drill(world, spare_kwh):
+    # Fills today's order as far as spare power and the deposit allow.
+    drill = world["ice_drill"]
+    deposit = world["ice_deposit"]
+    kg = min(drill["kg_today"], spare_kwh / drill["kwh_per_kg"], deposit["kg"])
+    deposit["kg"] -= kg
+    world["water"]["level"] += kg
+    return kg

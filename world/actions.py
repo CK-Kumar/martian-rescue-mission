@@ -18,6 +18,11 @@ def inspect(world, target):
         battery = world["rover_battery"]
         battery["found"] = True
         return f"rover battery: {battery['kwh']:.1f} kWh left, {battery['volts']}V DC output"
+    if target == "ground":
+        ice = world["ice_deposit"]
+        ice["found"] = True
+        cost = world["ice_drill"]["kwh_per_kg"]
+        return f"ice under the regolith: about {ice['kg']:.0f} kg, drilling costs {cost} kWh per kg"
     return f"nothing useful found: {target}"
 
 
@@ -32,6 +37,15 @@ def use_battery(world, kwh):
     return f"drew {drawn:.1f} kWh from rover battery, {battery['kwh']:.1f} kWh left"
 
 
+def drill_ice(world, kg):
+    # Only an order: the drill runs later in the sol, on whatever power the
+    # O2 generator and recycler leave spare, so it may get less than asked.
+    if not world["ice_deposit"]["found"]:
+        return "no ice known"
+    world["ice_drill"]["kg_today"] += kg
+    return f"drill ordered: {kg:.1f} kg"
+
+
 def apply_action(world, action):
     if action["type"] == "repair":
         return repair(world, action["target"])
@@ -39,4 +53,6 @@ def apply_action(world, action):
         return inspect(world, action["target"])
     if action["type"] == "use_battery":
         return use_battery(world, action["kwh"])
+    if action["type"] == "drill_ice":
+        return drill_ice(world, action["kg"])
     return f"unknown action: {action['type']}"

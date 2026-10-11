@@ -1,6 +1,6 @@
 from world.actions import apply_action
 from world.constants import WATER_GRACE_SOLS
-from world.life_support import crew_uses, leak_o2, make_o2, recycle_water
+from world.life_support import crew_uses, leak_o2, make_o2, recycle_water, run_drill
 from world.power import machine_fractions, solar_today
 
 
@@ -28,8 +28,9 @@ def check_death(world):
 
 
 def step(world, actions):
-    # Battery power only lasts the sol it was drawn in.
+    # Battery power and drill orders only last the sol they were made in.
     world["power"]["battery_today"] = 0.0
+    world["ice_drill"]["kg_today"] = 0.0
     # The crew acts at the start of the sol, then the sol plays out.
     messages = [apply_action(world, action) for action in actions]
     # Make before use: the crew gets today's O2 and water first.
@@ -38,6 +39,9 @@ def step(world, actions):
     fractions = machine_fractions(world, kwh)
     make_o2(world, fractions["o2"])
     recycle_water(world, fractions["recycler"])
+    if world["ice_drill"]["kg_today"] > 0:
+        kg = run_drill(world, fractions["spare_kwh"])
+        messages.append(f"drilled {kg:.1f} kg ice, {world['ice_deposit']['kg']:.1f} kg left")
     crew_uses(world)
     leak_o2(world)
     clamp_tanks(world)

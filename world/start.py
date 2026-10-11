@@ -38,7 +38,8 @@ def new_world(seed):
         # A drill is the clue that there is something to dig for. Melting
         # ice costs power, so water competes with O2 for solar. Dearer than
         # recycling (~1.3 kWh/kg) so the recycler stays worth running.
-        "ice_drill": {"kwh_per_kg": 2.0},
+        # kg_today: how much the crew ordered drilled this sol.
+        "ice_drill": {"kwh_per_kg": 2.0, "kg_today": 0.0},
         "ice_deposit": {"kg": 80, "found": False},
         "sols_without_water": 0,
     }
