@@ -36,9 +36,11 @@ def main():
     parser.add_argument("--track", action="store_true", help="record this run in MLflow")
     # Stop early to test cheaply; 0 = play until dead or rescued.
     parser.add_argument("--max-sols", type=int, default=0)
+    # Same seed -> same Mars (storm timing), so crews can be compared fairly.
+    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     crew_name = args.crew
-    seed = 42
+    seed = args.seed
     world = new_world(seed)
     agent = new_agent(LLM_CREWS[crew_name]) if crew_name in LLM_CREWS else None
     log_file, log_path = open_log(crew_name, seed)
