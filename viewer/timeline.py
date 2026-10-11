@@ -10,8 +10,9 @@ from viewer.story import FIRSTS
 START = {"o2": 17, "water": 60}  # new_world's starting tanks
 ICONS = {"inspect": "🔍", "repair": "🔧", "set_power": "⚡", "use": "✋",
          "use_battery": "🔋", "drill_ice": "⛏️"}
-# World answers that mean the crew learned or fixed something important.
-FINDINGS = [needle for needle, _, _ in FIRSTS] + ["hiss", "sealed it"]
+# World answers that mean the crew discovered or fixed something. Routine
+# answers (drilling, drawing power) are left out so blue stays rare.
+FINDINGS = [needle for needle, kind, _ in FIRSTS if kind == "good"] + ["hiss", "sealed it"]
 
 CSS = """
 <style>
@@ -28,7 +29,7 @@ CSS = """
 .mm-bar i { display: block; height: 100%; border-radius: 99px; }
 .mm-meter b { font-variant-numeric: tabular-nums; font-weight: 600; }
 .mm-low b { color: #B3261E; }
-.mm-decision { font-size: 18px; line-height: 1.55; margin: 0 0 16px; max-width: 70ch; white-space: pre-wrap; }
+.mm-decision { font-size: 17px; line-height: 1.55; margin: 0 0 16px; max-width: 70ch; white-space: pre-wrap; }
 .mm-decision::before { content: "“"; font-family: 'Barlow Condensed', sans-serif; font-size: 40px; line-height: 0;
                        vertical-align: -0.35em; margin-right: 4px; color: #3E6FA8; }
 .mm-steps { display: grid; gap: 6px; margin-bottom: 14px; }
@@ -124,7 +125,8 @@ def reasoning_for(row):
     if not thoughts:
         return ""
     paragraphs = "".join(f"<p>{escape(t)}</p>" for t in thoughts)
-    return f'<details class="mm-why"><summary>How it reasoned ({len(thoughts)} thoughts)</summary>{paragraphs}</details>'
+    # Open by default: seeing how the agent thinks is the point of the viewer.
+    return f'<details class="mm-why" open><summary>How it reasoned ({len(thoughts)} thoughts)</summary>{paragraphs}</details>'
 
 
 def cost_for(row):
@@ -150,11 +152,7 @@ def sol_block(row, before):
     if "llm_calls" in row:
         note = row.get("log_note", "").strip()
         if note:
-            first, _, rest = note.partition("\n\n")
-            parts.append(f'<p class="mm-decision">{escape(first.strip())}</p>')
-            if rest.strip():
-                parts.append(f'<details class="mm-why mm-rest"><summary>Rest of the log</summary>'
-                             f'<p>{escape(rest.strip())}</p></details>')
+            parts.append(f'<p class="mm-decision">{escape(note)}</p>')
         parts.append(steps_for(row))
         parts.append(reasoning_for(row))
         parts.append(cost_for(row))
