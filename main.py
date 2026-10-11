@@ -4,6 +4,7 @@ from agents.single import new_agent, take_turn
 from crews.scripted import CREWS
 from log import git_info, open_log, write_line
 from tracking import record_run
+from world.power import dust_today
 from world.rules import step
 from world.start import new_world
 
@@ -50,6 +51,7 @@ def main():
     overnight = []  # what the last sol reported, shown to the agent next turn
     while not world["dead"] and not world["rescued"]:
         sol = world["sol"]
+        dust = dust_today(world)  # read before step() moves to the next sol
         if agent:
             # The agent acts on the world itself during its turn, so it sees
             # each result at once; step() then only plays out the sol.
@@ -60,17 +62,22 @@ def main():
         else:
             actions = CREWS[crew_name](world)
             row = {"sol": sol, "actions": actions, "messages": step(world, actions)}
+        row["dust"] = dust
         row["o2"] = world["oxygen"]["level"]
         row["water"] = world["water"]["level"]
         rows.append(row)
         write_line(log_file, row)
 
         # Round only for display; the log keeps full precision.
-        print(f"sol {sol:2} | o2 {row['o2']:5.2f} | water {row['water']:6.2f} | {row['messages']}")
+        weather = "STORM" if dust > 0 else "clear"
+        print(f"sol {sol:2} | {weather} | o2 {row['o2']:5.2f} | water {row['water']:6.2f} | {row['messages']}")
         if agent:
+            for call in turn["calls"]:
+                if call["reasoning"].strip():
+                    print(f"         think: {call['reasoning'].strip()[:200]}".replace("\n", " "))
             for a in turn["actions"]:
-                print(f"         did: {a['action']} -> {a['message']}")
-            print(f"         note: {turn['log_note'][:150]}")
+                print(f"         did:   {a['action']} -> {a['message']}")
+            print(f"         note:  {turn['log_note'][:150]}".replace("\n", " "))
         if args.max_sols and len(rows) >= args.max_sols:
             break
 

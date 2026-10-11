@@ -13,8 +13,9 @@ from world.power import dust_today
 # every crew (LLM or decision model) picks inspect targets from this same list.
 VISIBLE_OBJECTS = [
     "airlock", "antenna", "comms dish", "drill (in storage)", "ground",
-    "habitat wall", "medical kit", "rover", "solar panels", "spare suits",
-    "supply crate", "toolbox", "water tank", "oxygen tank", "weather station",
+    "habitat wall", "medical kit", "o2 generator", "recycler", "rover",
+    "solar panels", "spare suits", "supply crate", "toolbox", "water tank",
+    "oxygen tank", "weather station",
 ]
 
 
