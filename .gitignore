@@ -14,3 +14,7 @@ wheels/
 
 # Run logs (results, not code)
 runs/
+
+# MLflow local store (results, not code)
+mlflow.db
+mlruns/
