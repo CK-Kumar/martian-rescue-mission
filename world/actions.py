@@ -46,6 +46,16 @@ def drill_ice(world, kg):
     return f"drill ordered: {kg:.1f} kg"
 
 
+def set_power(world, o2_kwh, recycler_kwh):
+    # Unlike the battery, this stays until changed. Asking for more than
+    # solar gives is allowed: the O2 generator is fed first, recycler gets
+    # the rest, and the drill only what both leave.
+    if o2_kwh < 0 or recycler_kwh < 0:
+        return "power must be 0 or more"
+    world["power"]["split"] = {"o2": o2_kwh, "recycler": recycler_kwh}
+    return f"power split set: o2 generator {o2_kwh:.2f} kWh, recycler {recycler_kwh:.2f} kWh"
+
+
 def apply_action(world, action):
     if action["type"] == "repair":
         return repair(world, action["target"])
@@ -55,4 +65,6 @@ def apply_action(world, action):
         return use_battery(world, action["kwh"])
     if action["type"] == "drill_ice":
         return drill_ice(world, action["kg"])
+    if action["type"] == "set_power":
+        return set_power(world, action["o2"], action["recycler"])
     return f"unknown action: {action['type']}"
