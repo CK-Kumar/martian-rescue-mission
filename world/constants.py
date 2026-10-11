@@ -16,6 +16,7 @@ O2_GENERATOR_MAX_KG = 4.2
 # out-produce it and must find and repair it. Starts before the earliest storm
 # (sol 4). Ignored, it kills around sol 10-11. Game numbers.
 LEAK_START_SOL = 2
+LEAK_LOCATION = "oxygen tank"  # a visible object; repair it to seal the leak
 LEAK_KG_PER_SOL = 2.0
 
 # Sols the crew survives with an empty water tank (about the human limit).

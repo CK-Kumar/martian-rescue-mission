@@ -28,10 +28,8 @@ def check_death(world):
 
 
 def step(world, actions):
-    # Battery power and drill orders only last the sol they were made in.
-    world["power"]["battery_today"] = 0.0
-    world["ice_drill"]["kg_today"] = 0.0
-    # The crew acts at the start of the sol, then the sol plays out.
+    # The crew acts at the start of the sol, then the sol plays out. A crew
+    # may also act before calling step (LLM agents do, to see results at once).
     messages = [apply_action(world, action) for action in actions]
     # Make before use: the crew gets today's O2 and water first.
     # Battery joins the same pool as solar; the split decides where it goes.
@@ -42,6 +40,10 @@ def step(world, actions):
     if world["ice_drill"]["kg_today"] > 0:
         kg = run_drill(world, fractions["spare_kwh"])
         messages.append(f"drilled {kg:.1f} kg ice, {world['ice_deposit']['kg']:.1f} kg left")
+    # Battery power and drill orders only last the sol they were made in.
+    # Reset here, at the end, so orders placed before step() still count.
+    world["power"]["battery_today"] = 0.0
+    world["ice_drill"]["kg_today"] = 0.0
     crew_uses(world)
     leak_o2(world)
     clamp_tanks(world)

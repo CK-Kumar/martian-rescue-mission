@@ -1,29 +1,58 @@
-# Actions are plain dicts, e.g. {"type": "repair", "target": "oxygen_leak"}.
+from world.constants import LEAK_LOCATION
+
+# Actions are plain dicts, e.g. {"type": "repair", "target": "oxygen tank"}.
 # Each returns a short message: that is all the crew learns about the result.
 
 
 def repair(world, target):
-    # Only the leak is repairable in v1. Repairing something that isn't
-    # broken just finds nothing, so a crew can waste a call guessing.
-    if target == "oxygen_leak" and world["oxygen"]["leak"]:
+    # Targets are visible objects, not fault names: a "repair oxygen_leak"
+    # target would tell the crew a leak exists. Only one object hides a fault
+    # in v1; the rest just find nothing, so a crew can waste a call guessing.
+    target = target.strip().lower()
+    if target == LEAK_LOCATION and world["oxygen"]["leak"]:
         world["oxygen"]["leak"] = False
-        return "oxygen leak sealed"
-    return f"nothing to repair: {target}"
+        return f"{target}: found a leaking valve and sealed it"
+    return f"{target}: no fault found"
 
 
 def inspect(world, target):
     # The only way to find hidden help. The crew gets clues (the aux ports
     # say "48V DC") but must think to look at the rover.
+    target = target.strip().lower()
     if target == "rover":
         battery = world["rover_battery"]
         battery["found"] = True
-        return f"rover battery: {battery['kwh']:.1f} kWh left, {battery['volts']}V DC output"
+        # Once found, it is fair to say how to use it.
+        return (f"rover battery: {battery['kwh']:.1f} kWh left, {battery['volts']}V DC output."
+                f" Use the rover to draw power (amount in kWh).")
     if target == "ground":
         ice = world["ice_deposit"]
         ice["found"] = True
         cost = world["ice_drill"]["kwh_per_kg"]
-        return f"ice under the regolith: about {ice['kg']:.0f} kg, drilling costs {cost} kWh per kg"
+        return (f"ice under the regolith: about {ice['kg']:.0f} kg, drilling costs {cost} kWh per kg."
+                f" Use the drill to dig it (amount in kg).")
+    if target == LEAK_LOCATION:
+        # Inspect must tell the truth about a visible object's state; it shows
+        # the symptom, and fixing it is still the crew's job (repair).
+        if world["oxygen"]["leak"]:
+            return f"{target}: faint hiss near the outlet valve; pressure falling"
+        return f"{target}: sealed, holding pressure"
     return f"nothing useful found: {target}"
+
+
+DRILL_NAMES = ["drill", "drill (in storage)", "ice drill"]
+
+
+def use(world, target, amount):
+    # One generic tool for agents, so their tool list never changes mid-game
+    # (Claude rejects a changed list) and never names what is hidden. Until
+    # the crew has found something, every target gives the same answer.
+    target = target.strip().lower()
+    if target == "rover" and world["rover_battery"]["found"]:
+        return use_battery(world, amount)
+    if target in DRILL_NAMES and world["ice_deposit"]["found"]:
+        return drill_ice(world, amount)
+    return f"{target}: nothing here you can use"
 
 
 def use_battery(world, kwh):
@@ -67,4 +96,6 @@ def apply_action(world, action):
         return drill_ice(world, action["kg"])
     if action["type"] == "set_power":
         return set_power(world, action["o2"], action["recycler"])
+    if action["type"] == "use":
+        return use(world, action["target"], action["amount"])
     return f"unknown action: {action['type']}"

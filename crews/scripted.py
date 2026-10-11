@@ -10,7 +10,7 @@ def do_nothing(world):
 def repair_only(world):
     # Sol 3: the first sol after the leak where a crew could notice O2 fell.
     if world["sol"] == 3:
-        return [{"type": "repair", "target": "oxygen_leak"}]
+        return [{"type": "repair", "target": "oxygen tank"}]
     return []
 
 
@@ -24,7 +24,7 @@ def perfect(world):
     actions = []
     if sol == 3:
         actions += [
-            {"type": "repair", "target": "oxygen_leak"},
+            {"type": "repair", "target": "oxygen tank"},
             {"type": "inspect", "target": "rover"},
             {"type": "inspect", "target": "ground"},
         ]
