@@ -7,7 +7,7 @@ def main():
     print("sol | o2    | water")
     while not world["dead"] and not world["rescued"]:
         sol = world["sol"]
-        step(world)
+        step(world, [])  # do-nothing crew: no actions
         # Round only for display; the world keeps full precision.
         print(f"{sol:3} | {world['oxygen']['level']:5.2f} | {world['water']['level']:6.2f}")
     if world["dead"]:

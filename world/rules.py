@@ -1,3 +1,4 @@
+from world.actions import apply_action
 from world.constants import WATER_GRACE_SOLS
 from world.life_support import crew_uses, leak_o2, make_o2, recycle_water
 from world.power import machine_fractions, solar_today
@@ -26,8 +27,10 @@ def check_death(world):
         world["cause_of_death"] = "dehydration"
 
 
-def step(world):
-    # One sol. Make before use: the crew gets today's O2 and water first.
+def step(world, actions):
+    # The crew acts at the start of the sol, then the sol plays out.
+    messages = [apply_action(world, action) for action in actions]
+    # Make before use: the crew gets today's O2 and water first.
     kwh = solar_today(world)
     fractions = machine_fractions(world, kwh)
     make_o2(world, fractions["o2"])
@@ -37,7 +40,8 @@ def step(world):
     clamp_tanks(world)
     check_death(world)
     if world["dead"]:
-        return
+        return messages
     world["sol"] += 1
     if world["sol"] >= world["rescue_sol"]:
         world["rescued"] = True
+    return messages
