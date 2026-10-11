@@ -21,7 +21,8 @@ def new_world(seed):
         "storm": {"start": rng.randint(4, 10), "sols": 7, "dust": 0.5},
         # Default o2 split 23 kWh = 0.8 of the generator = 3.36 kg, exactly what
         # the crew breathes. Giving it more power stockpiles O2.
-        "power": {"solar_kwh": 60, "dust": 0.0, "split": {"o2": 23, "recycler": 18}},
+        # battery_today: kWh the crew drew from the rover battery this sol.
+        "power": {"solar_kwh": 60, "dust": 0.0, "split": {"o2": 23, "recycler": 18}, "battery_today": 0.0},
         # Machines start on: a real base never has life support off, and we
         # test crisis handling, not pressing "on". A do-nothing crew dies of
         # the leak around sol 10; to be confirmed when step() runs.

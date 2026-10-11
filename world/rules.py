@@ -28,10 +28,13 @@ def check_death(world):
 
 
 def step(world, actions):
+    # Battery power only lasts the sol it was drawn in.
+    world["power"]["battery_today"] = 0.0
     # The crew acts at the start of the sol, then the sol plays out.
     messages = [apply_action(world, action) for action in actions]
     # Make before use: the crew gets today's O2 and water first.
-    kwh = solar_today(world)
+    # Battery joins the same pool as solar; the split decides where it goes.
+    kwh = solar_today(world) + world["power"]["battery_today"]
     fractions = machine_fractions(world, kwh)
     make_o2(world, fractions["o2"])
     recycle_water(world, fractions["recycler"])
