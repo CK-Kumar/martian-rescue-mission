@@ -1,14 +1,5 @@
 import random
 
-# Rates per crew member per sol. Sources: NASA life-support planning figures
-O2_PER_PERSON_KG = 0.84
-DRINK_WATER_PER_PERSON_KG = 3.8
-WATER_PER_KG_O2 = 1.125  # electrolysis: 36 g water -> 32 g O2
-
-# Energy each machine needs per sol to run at full rate.
-O2_GENERATOR_KWH = 23  # 3.36 kg O2 at ~6-7.7 kWh/kg
-RECYCLER_KWH = 18      # ISS water system average draw
-
 
 def new_world(seed):
     # Same seed -> same storm, so every team faces the same Mars.
@@ -19,6 +10,7 @@ def new_world(seed):
         "crew": 4,
         "dead": False,
         "cause_of_death": None,
+        "rescued": False,
         # Rescue ship lands on this sol. Numbers below are tuned so only a crew
         # that uses battery + ice + recycler + stockpiling reaches it.
         "rescue_sol": 20,
@@ -27,8 +19,12 @@ def new_world(seed):
         # Start 4-10 only: earlier leaves no time to stockpile (best play
         # dies), later lets lazy play reach rescue. Found by simulation.
         "storm": {"start": rng.randint(4, 10), "sols": 7, "dust": 0.5},
+        # Default o2 split 23 kWh = 0.8 of the generator = 3.36 kg, exactly what
+        # the crew breathes. Giving it more power stockpiles O2.
         "power": {"solar_kwh": 60, "dust": 0.0, "split": {"o2": 23, "recycler": 18}},
-        # Tanks sized so a do-nothing crew dies around sol 5-6.
+        # Machines start on: a real base never has life support off, and we
+        # test crisis handling, not pressing "on". A do-nothing crew dies of
+        # the leak around sol 10; to be confirmed when step() runs.
         "oxygen": {"level": 17, "max": 50, "leak": False},
         "water": {"level": 60, "max": 200},
         # Both machines have an unused battery input. This is the clue the
@@ -45,8 +41,3 @@ def new_world(seed):
         "ice_deposit": {"kg": 80, "found": False},
         "sols_without_water": 0,
     }
-
-
-if __name__ == "__main__":
-    world = new_world(seed=42)
-    print(world)
