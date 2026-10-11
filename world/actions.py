@@ -1,4 +1,4 @@
-from world.constants import LEAK_LOCATION
+from world.constants import FORECAST_SOLS, LEAK_LOCATION
 
 # Actions are plain dicts, e.g. {"type": "repair", "target": "oxygen tank"}.
 # Each returns a short message: that is all the crew learns about the result.
@@ -31,6 +31,8 @@ def inspect(world, target):
         cost = world["ice_drill"]["kwh_per_kg"]
         return (f"ice under the regolith: about {ice['kg']:.0f} kg, drilling costs {cost} kWh per kg."
                 f" Use the drill to dig it (amount in kg).")
+    if target == "weather station":
+        return forecast(world)
     if target == LEAK_LOCATION:
         # Inspect must tell the truth about a visible object's state; it shows
         # the symptom, and fixing it is still the crew's job (repair).
@@ -40,7 +42,21 @@ def inspect(world, target):
     return f"nothing useful found: {target}"
 
 
-DRILL_NAMES = ["drill", "drill (in storage)", "ice drill"]
+def forecast(world):
+    # Short warning only (FORECAST_SOLS ahead), so early storms stay hard but
+    # a crew that checks the weather can prepare. The scripted perfect crew
+    # reads the full schedule; agents only get this.
+    sol = world["sol"]
+    start = world["storm"]["start"]
+    end = start + world["storm"]["sols"]
+    if start <= sol < end:
+        return f"weather station: heavy dust now, solar output about halved; expected to clear around sol {end}"
+    if sol < start <= sol + FORECAST_SOLS:
+        return f"weather station: dust storm approaching, expected around sol {start}, lasting several sols"
+    return f"weather station: no storm expected in the next {FORECAST_SOLS} sols"
+
+
+DRILL_NAMES =["drill", "drill (in storage)", "ice drill"]
 
 
 def use(world, target, amount):

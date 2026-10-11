@@ -9,7 +9,8 @@
 #              "provider", "raw": <provider's own content, replayed unchanged>}
 #             {"role": "tool", "results": [{"id", "content"}]}
 #   reply:    {"text", "reasoning", "tool_calls", "raw", "stop_reason",
-#              "tokens_in", "tokens_out", "latency_ms", "cost_usd"}
+#              "tokens_in", "cache_read", "cache_write", "tokens_out",
+#              "latency_ms", "cost_usd"}
 
 import time
 
@@ -25,12 +26,21 @@ PRICES = {
 }
 
 
-def cost_usd(model, tokens_in, tokens_out):
+# Prompt caching: re-sent history that matches the last request is billed
+# at ~0.1x as a cache read; the new part is written to cache at ~1.25x
+# (5-minute cache). Multipliers from Anthropic's caching docs, 2026-10-11.
+CACHE_READ = 0.1
+CACHE_WRITE = 1.25
+
+
+def cost_usd(model, tokens_in, tokens_out, cache_read=0, cache_write=0):
     # Unknown model: None, not 0, so a missing price is never mistaken for free.
+    # tokens_in here is only the uncached input.
     if model not in PRICES:
         return None
     price_in, price_out = PRICES[model]
-    return (tokens_in * price_in + tokens_out * price_out) / 1_000_000
+    billed_in = tokens_in + cache_read * CACHE_READ + cache_write * CACHE_WRITE
+    return (billed_in * price_in + tokens_out * price_out) / 1_000_000
 
 
 def to_anthropic_messages(messages):
@@ -62,6 +72,10 @@ def call_anthropic(model, system, messages, tools):
         # "summarized" so the log shows how the agent reasoned; the default
         # on current models returns empty thinking text.
         thinking={"type": "adaptive", "display": "summarized"},
+        # Each call re-sends the whole history; caching bills the repeated
+        # part at ~0.1x. Auto mode marks the last block, so every call
+        # reuses everything the previous call already sent.
+        cache_control={"type": "ephemeral"},
         tools=[{"name": t["name"], "description": t["description"], "input_schema": t["params"]} for t in tools],
         messages=to_anthropic_messages(messages),
     )
@@ -76,18 +90,25 @@ def call_anthropic(model, system, messages, tools):
         elif block.type == "tool_use":
             tool_calls.append({"id": block.id, "name": block.name, "args": block.input})
 
-    tokens_in = response.usage.input_tokens
-    tokens_out = response.usage.output_tokens  # includes thinking tokens
+    usage = response.usage
+    uncached = usage.input_tokens  # only the part not served from cache
+    cache_read = usage.cache_read_input_tokens or 0
+    cache_write = usage.cache_creation_input_tokens or 0
+    tokens_out = usage.output_tokens  # includes thinking tokens
     return {
         "text": "\n".join(text),
         "reasoning": "\n".join(reasoning),
         "tool_calls": tool_calls,
         "raw": response.to_dict()["content"],
         "stop_reason": response.stop_reason,
-        "tokens_in": tokens_in,
+        # tokens_in is everything the model read, so runs with and without
+        # caching compare; the cache fields show how much was cheap.
+        "tokens_in": uncached + cache_read + cache_write,
+        "cache_read": cache_read,
+        "cache_write": cache_write,
         "tokens_out": tokens_out,
         "latency_ms": round(latency_ms),
-        "cost_usd": cost_usd(model, tokens_in, tokens_out),
+        "cost_usd": cost_usd(model, uncached, tokens_out, cache_read, cache_write),
     }
 
 

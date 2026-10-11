@@ -21,3 +21,6 @@ LEAK_KG_PER_SOL = 2.0
 
 # Sols the crew survives with an empty water tank (about the human limit).
 WATER_GRACE_SOLS = 3
+
+# How many sols ahead the weather station can see a storm coming.
+FORECAST_SOLS = 2

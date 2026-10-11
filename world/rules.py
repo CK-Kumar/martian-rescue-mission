@@ -1,5 +1,5 @@
 from world.actions import apply_action
-from world.constants import WATER_GRACE_SOLS
+from world.constants import O2_GENERATOR_KWH, RECYCLER_KWH, WATER_GRACE_SOLS
 from world.life_support import crew_uses, leak_o2, make_o2, recycle_water, run_drill
 from world.power import machine_fractions, solar_today
 
@@ -33,13 +33,26 @@ def step(world, actions):
     messages = [apply_action(world, action) for action in actions]
     # Make before use: the crew gets today's O2 and water first.
     # Battery joins the same pool as solar; the split decides where it goes.
-    kwh = solar_today(world) + world["power"]["battery_today"]
+    solar = solar_today(world)
+    kwh = solar + world["power"]["battery_today"]
     fractions = machine_fractions(world, kwh)
-    make_o2(world, fractions["o2"])
-    recycle_water(world, fractions["recycler"])
+    o2_made = make_o2(world, fractions["o2"])
+    water_recycled = recycle_water(world, fractions["recycler"])
+    ice_kg = 0.0
     if world["ice_drill"]["kg_today"] > 0:
-        kg = run_drill(world, fractions["spare_kwh"])
-        messages.append(f"drilled {kg:.1f} kg ice, {world['ice_deposit']['kg']:.1f} kg left")
+        ice_kg = run_drill(world, fractions["spare_kwh"])
+        messages.append(f"drilled {ice_kg:.1f} kg ice, {world['ice_deposit']['kg']:.1f} kg left")
+    # What the base's meters recorded this sol; sensors show it next sol.
+    # A real base logs what each machine actually got, not just its rating.
+    world["last_sol"] = {
+        "solar_kwh": solar,
+        "battery_kwh": world["power"]["battery_today"],
+        "o2_generator_kwh": fractions["o2"] * O2_GENERATOR_KWH,
+        "recycler_kwh": fractions["recycler"] * RECYCLER_KWH,
+        "o2_made_kg": o2_made,
+        "water_recycled_kg": water_recycled,
+        "ice_drilled_kg": ice_kg,
+    }
     # Battery power and drill orders only last the sol they were made in.
     # Reset here, at the end, so orders placed before step() still count.
     world["power"]["battery_today"] = 0.0

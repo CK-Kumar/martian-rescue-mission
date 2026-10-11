@@ -42,4 +42,6 @@ def new_world(seed):
         "ice_drill": {"kwh_per_kg": 2.0, "kg_today": 0.0},
         "ice_deposit": {"kg": 80, "found": False},
         "sols_without_water": 0,
+        # Meter readings from the previous sol; none before sol 1 has run.
+        "last_sol": None,
     }

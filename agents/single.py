@@ -31,7 +31,10 @@ def take_turn(agent, world, overnight):
     calls = []    # one record per model call, for the log
     actions = []  # what the agent did, and what the world answered
     used = 0
-    while True:
+    # Model calls per sol. Over budget, tool calls are refused (not run), so
+    # the agent still gets a call to write its log note; this cap only stops
+    # a model that keeps calling tools anyway.
+    for _ in range(MAX_TOOL_CALLS + 3):
         reply = call_model(agent["config"], SYSTEM, agent["history"], tools(world))
         # Log everything except "raw" (the provider's own blocks, large and
         # only needed to replay the conversation).
@@ -49,7 +52,7 @@ def take_turn(agent, world, overnight):
         results = []
         for call in reply["tool_calls"]:
             if used >= MAX_TOOL_CALLS:
-                message = "no tool calls left this sol"
+                message = "refused: no tool calls left this sol. Write your log note now."
             else:
                 action = {"type": call["name"], **call["args"]}
                 try:
@@ -59,9 +62,11 @@ def take_turn(agent, world, overnight):
                     message = f"invalid arguments: {error}"
                 actions.append({"action": action, "message": message})
                 used += 1
+                # Tell the agent its budget so it can plan the rest of the sol.
+                message += f" [{MAX_TOOL_CALLS - used} tool calls left this sol]"
             results.append({"id": call["id"], "content": message})
+        # Every tool call gets a result, even refused ones: the API rejects a
+        # history with an unanswered tool call.
         agent["history"].append({"role": "tool", "results": results})
-        if used >= MAX_TOOL_CALLS:
-            break
 
     return {"calls": calls, "actions": actions, "log_note": reply["text"]}

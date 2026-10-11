@@ -54,6 +54,8 @@ def sensors(world):
         },
         "visible_objects": VISIBLE_OBJECTS,
     }
+    if world["last_sol"]:
+        reading["last_sol_meters"] = {k: round(v, 2) for k, v in world["last_sol"].items()}
     if world["rover_battery"]["found"]:
         reading["rover_battery_kwh"] = round(world["rover_battery"]["kwh"], 2)
     if world["ice_deposit"]["found"]:

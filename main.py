@@ -23,6 +23,7 @@ def llm_totals(rows):
     return {
         "model_calls": len(calls),
         "tokens_in": sum(c["tokens_in"] for c in calls),
+        "cache_read": sum(c.get("cache_read", 0) for c in calls),
         "tokens_out": sum(c["tokens_out"] for c in calls),
         "cost_usd": sum(costs),
         "latency_ms_mean": round(sum(c["latency_ms"] for c in calls) / len(calls)),
@@ -106,7 +107,8 @@ def main():
 
     print(f"{outcome.upper()} on sol {world['sol']}" + (f": {world['cause_of_death']}" if world["dead"] else ""))
     if "model_calls" in result:
-        print(f"model calls {result['model_calls']} | tokens in {result['tokens_in']} out {result['tokens_out']}"
+        print(f"model calls {result['model_calls']} | tokens in {result['tokens_in']}"
+              f" (cached {result['cache_read']}) out {result['tokens_out']}"
               f" | cost ${result['cost_usd']:.4f} | mean latency {result['latency_ms_mean']} ms")
     print(f"log: {log_path}")
 
