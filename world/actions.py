@@ -15,6 +15,11 @@ def repair(world, target):
     return f"{target}: no fault found"
 
 
+# Real machines answer with their state, not "nothing useful found", which
+# reads as "I could not look". Their faults (if any) show the same way.
+WORKING_MACHINES = ["o2 generator", "recycler", "solar panels", "water tank"]
+
+
 def inspect(world, target):
     # The only way to find hidden help. The crew gets clues (the aux ports
     # say "48V DC") but must think to look at the rover.
@@ -24,13 +29,16 @@ def inspect(world, target):
         battery["found"] = True
         # Once found, it is fair to say how to use it.
         return (f"rover battery: {battery['kwh']:.1f} kWh left, {battery['volts']}V DC output."
-                f" Use the rover to draw power (amount in kWh).")
+                f" Use the rover to draw power (amount in kWh). Power drawn joins today's"
+                f" solar power and is lost if not used by the end of the sol.")
     if target == "ground":
         ice = world["ice_deposit"]
         ice["found"] = True
         cost = world["ice_drill"]["kwh_per_kg"]
         return (f"ice under the regolith: about {ice['kg']:.0f} kg, drilling costs {cost} kWh per kg."
-                f" Use the drill to dig it (amount in kg).")
+                f" Use the drill to dig it (amount in kg). The drill runs on the power left"
+                f" after the O2 generator and recycler, so it may dig less than ordered;"
+                f" an order lasts one sol.")
     if target == "weather station":
         return forecast(world)
     if target == LEAK_LOCATION:
@@ -39,6 +47,10 @@ def inspect(world, target):
         if world["oxygen"]["leak"]:
             return f"{target}: faint hiss near the outlet valve; pressure falling"
         return f"{target}: sealed, holding pressure"
+    if target == "recycler" and world["recycler"]["broken"]:
+        return f"{target}: broken"
+    if target in WORKING_MACHINES:
+        return f"{target}: working normally"
     return f"nothing useful found: {target}"
 
 
