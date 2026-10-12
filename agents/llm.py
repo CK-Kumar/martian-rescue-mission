@@ -12,9 +12,11 @@
 #              "tokens_in", "cache_read", "cache_write", "tokens_out",
 #              "latency_ms", "cost_usd"}
 
+import json
 import time
 
 import anthropic
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()  # API keys come from .env, never from code
@@ -23,12 +25,16 @@ load_dotenv()  # API keys come from .env, never from code
 # date. Haiku 5.5: Anthropic list price for prompts up to 100K, checked 2026-10-11.
 PRICES = {
     "claude-haiku-5-5": (0.10, 0.50),
+    # GPT-6 Luna: OpenAI list price, standard tier, checked 2026-10-12.
+    "gpt-6-luna": (0.10, 0.50),
 }
 
 
 # Prompt caching: re-sent history that matches the last request is billed
 # at ~0.1x as a cache read; the new part is written to cache at ~1.25x
 # (5-minute cache). Multipliers from Anthropic's caching docs, 2026-10-11.
+# OpenAI (GPT-5.6 and later) uses the same 0.1x / 1.25x, and caches on its
+# own with no cache_control needed. OpenAI caching docs, 2026-10-12.
 CACHE_READ = 0.1
 CACHE_WRITE = 1.25
 
@@ -59,6 +65,23 @@ def to_anthropic_messages(messages):
                 for r in m["results"]
             ]
             out.append({"role": "user", "content": results})
+    return out
+
+
+def to_openai_input(messages):
+    # Responses API format. The system prompt goes in `instructions`, not here.
+    out = []
+    for m in messages:
+        if m["role"] == "user":
+            out.append({"role": "user", "content": m["text"]})
+        elif m["role"] == "assistant":
+            # Replay GPT's own output items (reasoning, tool calls, text)
+            # unchanged, like Claude's thinking blocks.
+            out.extend(m["raw"])
+        elif m["role"] == "tool":
+            # One item per result; Claude wants them all in one message.
+            for r in m["results"]:
+                out.append({"type": "function_call_output", "call_id": r["id"], "output": r["content"]})
     return out
 
 
@@ -112,8 +135,63 @@ def call_anthropic(model, system, messages, tools):
     }
 
 
+def call_openai(model, system, messages, tools):
+    client = openai.OpenAI()  # reads OPENAI_API_KEY
+    start = time.perf_counter()
+    response = client.responses.create(
+        model=model,
+        instructions=system,
+        input=to_openai_input(messages),
+        # strict=False: strict mode demands schema changes Claude doesn't
+        # need; both models should get exactly the same tools.
+        tools=[{"type": "function", "name": t["name"], "description": t["description"],
+                "parameters": t["params"], "strict": False} for t in tools],
+        # "auto" summary so the log shows how it reasoned, like Claude's
+        # "summarized". medium is the model's default effort.
+        reasoning={"effort": "medium", "summary": "auto"},
+        # store=False: OpenAI keeps no copy, we resend the whole history as
+        # with Claude. Reasoning then comes back encrypted so it can be replayed.
+        store=False,
+        include=["reasoning.encrypted_content"],
+        max_output_tokens=16000,
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    text, reasoning, tool_calls = [], [], []
+    for item in response.output:
+        if item.type == "message":
+            text.extend(part.text for part in item.content if part.type == "output_text")
+        elif item.type == "reasoning":
+            reasoning.extend(part.text for part in item.summary)
+        elif item.type == "function_call":
+            # call_id, not id: the result must quote call_id to match.
+            tool_calls.append({"id": item.call_id, "name": item.name, "args": json.loads(item.arguments)})
+
+    usage = response.usage
+    cache_read = usage.input_tokens_details.cached_tokens or 0
+    cache_write = usage.input_tokens_details.cache_write_tokens or 0
+    # input_tokens counts everything read, cached parts included.
+    uncached = usage.input_tokens - cache_read - cache_write
+    tokens_out = usage.output_tokens  # includes reasoning tokens
+    stop = response.incomplete_details.reason if response.incomplete_details else response.status
+    return {
+        "text": "\n".join(text),
+        "reasoning": "\n".join(reasoning),
+        "tool_calls": tool_calls,
+        "raw": response.to_dict()["output"],
+        "stop_reason": stop,
+        "tokens_in": usage.input_tokens,
+        "cache_read": cache_read,
+        "cache_write": cache_write,
+        "tokens_out": tokens_out,
+        "latency_ms": round(latency_ms),
+        "cost_usd": cost_usd(model, uncached, tokens_out, cache_read, cache_write),
+    }
+
+
 ADAPTERS = {
     "anthropic": call_anthropic,
+    "openai": call_openai,
 }
 
 

@@ -11,6 +11,7 @@ from world.start import new_world
 # LLM crews: name -> model config. Trying another model = one new line here.
 LLM_CREWS = {
     "haiku_solo": {"provider": "anthropic", "model": "claude-haiku-5-5"},
+    "luna_solo": {"provider": "openai", "model": "gpt-6-luna"},
 }
 
 
