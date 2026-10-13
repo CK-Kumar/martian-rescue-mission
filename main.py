@@ -12,6 +12,8 @@ from world.start import new_world
 LLM_CREWS = {
     "haiku_solo": {"provider": "anthropic", "model": "claude-haiku-5-5"},
     "luna_solo": {"provider": "openai", "model": "gpt-6-luna"},
+    "qwen_solo": {"provider": "vllm", "model": "Qwen/Qwen3.5-9B"},
+    "grok_solo": {"provider": "xai", "model": "grok-4.20-0309-reasoning"},
 }
 
 
@@ -40,31 +42,39 @@ def run_game(crew_name, seed, max_sols=0, track=False, on_sol=None):
 
     rows = []
     overnight = []  # what the last sol reported, shown to the agent next turn
-    while not world["dead"] and not world["rescued"]:
-        sol = world["sol"]
-        dust = dust_today(world)  # read before step() moves to the next sol
-        if agent:
-            # The agent acts on the world itself during its turn, so it sees
-            # each result at once; step() then only plays out the sol.
-            turn = take_turn(agent, world, overnight)
-            overnight = step(world, [])
-            row = {"sol": sol, "actions": turn["actions"], "messages": overnight,
-                   "log_note": turn["log_note"], "llm_calls": turn["calls"]}
-        else:
-            actions = CREWS[crew_name](world)
-            row = {"sol": sol, "actions": actions, "messages": step(world, actions)}
-        row["dust"] = dust
-        row["o2"] = world["oxygen"]["level"]
-        row["water"] = world["water"]["level"]
-        rows.append(row)
-        write_line(log_file, row)
-        if on_sol:
-            on_sol(row)
-        if max_sols and len(rows) >= max_sols:
-            break
+    error = None
+    try:
+        while not world["dead"] and not world["rescued"]:
+            sol = world["sol"]
+            dust = dust_today(world)  # read before step() moves to the next sol
+            if agent:
+                # The agent acts on the world itself during its turn, so it sees
+                # each result at once; step() then only plays out the sol.
+                turn = take_turn(agent, world, overnight)
+                overnight = step(world, [])
+                row = {"sol": sol, "actions": turn["actions"], "messages": overnight,
+                       "log_note": turn["log_note"], "llm_calls": turn["calls"]}
+            else:
+                actions = CREWS[crew_name](world)
+                row = {"sol": sol, "actions": actions, "messages": step(world, actions)}
+            row["dust"] = dust
+            row["o2"] = world["oxygen"]["level"]
+            row["water"] = world["water"]["level"]
+            rows.append(row)
+            write_line(log_file, row)
+            if on_sol:
+                on_sol(row)
+            if max_sols and len(rows) >= max_sols:
+                break
+    except Exception as e:
+        # A crash (e.g. the vLLM pod goes away) must still write a result
+        # line with the reason; otherwise the log just stops mid-game.
+        error = f"{type(e).__name__}: {e}"
 
     commit, dirty = git_info()
-    if world["dead"]:
+    if error:
+        outcome = "crashed"
+    elif world["dead"]:
         outcome = "dead"
     elif world["rescued"]:
         outcome = "rescued"
@@ -79,6 +89,7 @@ def run_game(crew_name, seed, max_sols=0, track=False, on_sol=None):
         "seed": seed,
         "commit": commit,
         "dirty": dirty,
+        "error": error,
         **llm_totals(rows),
     }
     write_line(log_file, result)
@@ -117,6 +128,8 @@ def main():
     result, log_path = run_game(args.crew, args.seed, args.max_sols, args.track, on_sol=print_sol)
 
     print(f"{result['result'].upper()} on sol {result['sol']}" + (f": {result['cause']}" if result["cause"] else ""))
+    if result["error"]:
+        print(f"error: {result['error']}")
     if "model_calls" in result:
         print(f"model calls {result['model_calls']} | tokens in {result['tokens_in']}"
               f" (cached {result['cache_read']}) out {result['tokens_out']}"

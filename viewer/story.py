@@ -10,6 +10,8 @@ CAUSES = {"suffocation": "ran out of air", "dehydration": "ran out of water"}
 CREW_NAMES = {
     "haiku_solo": "Claude Haiku 5.5, flying solo",
     "luna_solo": "GPT-6 Luna, flying solo",
+    "qwen_solo": "Qwen3.5 9B, flying solo",
+    "grok_solo": "Grok 4.20 (reasoning), flying solo",
     "perfect": "Scripted crew, best known plan",
     "repair_only": "Scripted crew, repairs only",
     "do_nothing": "Scripted crew, does nothing",

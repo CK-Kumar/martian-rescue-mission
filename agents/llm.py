@@ -13,6 +13,7 @@
 #              "latency_ms", "cost_usd"}
 
 import json
+import os
 import time
 
 import anthropic
@@ -21,21 +22,21 @@ from dotenv import load_dotenv
 
 load_dotenv()  # API keys come from .env, never from code
 
-# USD per 1M tokens (input, output). Prices change: re-check and update the
-# date. Haiku 5.5: Anthropic list price for prompts up to 100K, checked 2026-10-11.
+# USD per 1M tokens (input, cached input, output). Prices change: re-check
+# and update the date.
+# Cached input: re-sent history that matches the last request is billed
+# cheaper; each provider sets its own cached price.
 PRICES = {
-    "claude-haiku-5-5": (0.10, 0.50),
-    # GPT-6 Luna: OpenAI list price, standard tier, checked 2026-10-12.
-    "gpt-6-luna": (0.10, 0.50),
+    # Anthropic list price for prompts up to 100K, checked 2026-10-11.
+    "claude-haiku-5-5": (0.10, 0.01, 0.50),
+    # OpenAI list price, standard tier, checked 2026-10-12.
+    "gpt-6-luna": (0.10, 0.01, 0.50),
+    # xAI list price for prompts under 200K, docs.x.ai/docs/models, checked 2026-10-12.
+    "grok-4.20-0309-reasoning": (1.25, 0.20, 2.50),
 }
 
-
-# Prompt caching: re-sent history that matches the last request is billed
-# at ~0.1x as a cache read; the new part is written to cache at ~1.25x
-# (5-minute cache). Multipliers from Anthropic's caching docs, 2026-10-11.
-# OpenAI (GPT-5.6 and later) uses the same 0.1x / 1.25x, and caches on its
-# own with no cache_control needed. OpenAI caching docs, 2026-10-12.
-CACHE_READ = 0.1
+# The new part of a prompt is written to cache at 1.25x the input price
+# (5-minute cache): Anthropic caching docs 2026-10-11, OpenAI 2026-10-12.
 CACHE_WRITE = 1.25
 
 
@@ -44,9 +45,9 @@ def cost_usd(model, tokens_in, tokens_out, cache_read=0, cache_write=0):
     # tokens_in here is only the uncached input.
     if model not in PRICES:
         return None
-    price_in, price_out = PRICES[model]
-    billed_in = tokens_in + cache_read * CACHE_READ + cache_write * CACHE_WRITE
-    return (billed_in * price_in + tokens_out * price_out) / 1_000_000
+    price_in, price_cached, price_out = PRICES[model]
+    return (tokens_in * price_in + cache_read * price_cached
+            + cache_write * price_in * CACHE_WRITE + tokens_out * price_out) / 1_000_000
 
 
 def to_anthropic_messages(messages):
@@ -82,6 +83,21 @@ def to_openai_input(messages):
             # One item per result; Claude wants them all in one message.
             for r in m["results"]:
                 out.append({"type": "function_call_output", "call_id": r["id"], "output": r["content"]})
+    return out
+
+
+def to_chat_messages(system, messages):
+    # Chat Completions format: the system prompt is the first message.
+    out = [{"role": "system", "content": system}]
+    for m in messages:
+        if m["role"] == "user":
+            out.append({"role": "user", "content": m["text"]})
+        elif m["role"] == "assistant":
+            out.append(m["raw"])
+        elif m["role"] == "tool":
+            # One message per result, matched to its call by tool_call_id.
+            for r in m["results"]:
+                out.append({"role": "tool", "tool_call_id": r["id"], "content": r["content"]})
     return out
 
 
@@ -137,23 +153,37 @@ def call_anthropic(model, system, messages, tools):
 
 def call_openai(model, system, messages, tools):
     client = openai.OpenAI()  # reads OPENAI_API_KEY
+    # "auto" summary so the log shows how it reasoned, like Claude's
+    # "summarized". medium is the model's default effort.
+    return call_responses(client, model, system, messages, tools,
+                          reasoning={"effort": "medium", "summary": "auto"})
+
+
+def call_xai(model, system, messages, tools):
+    # xAI speaks OpenAI's Responses API, so only the address and key differ.
+    client = openai.OpenAI(base_url="https://api.x.ai/v1", api_key=os.environ["XAI_API_KEY"])
+    # No reasoning settings: xAI's docs list no effort or summary options
+    # for grok-4.20, and an unknown option could be rejected.
+    return call_responses(client, model, system, messages, tools, reasoning=None)
+
+
+def call_responses(client, model, system, messages, tools, reasoning):
+    extra = {"reasoning": reasoning} if reasoning else {}
     start = time.perf_counter()
     response = client.responses.create(
         model=model,
         instructions=system,
         input=to_openai_input(messages),
         # strict=False: strict mode demands schema changes Claude doesn't
-        # need; both models should get exactly the same tools.
+        # need; every model should get exactly the same tools.
         tools=[{"type": "function", "name": t["name"], "description": t["description"],
                 "parameters": t["params"], "strict": False} for t in tools],
-        # "auto" summary so the log shows how it reasoned, like Claude's
-        # "summarized". medium is the model's default effort.
-        reasoning={"effort": "medium", "summary": "auto"},
-        # store=False: OpenAI keeps no copy, we resend the whole history as
-        # with Claude. Reasoning then comes back encrypted so it can be replayed.
+        # store=False: the provider keeps no copy, we resend the whole history
+        # as with Claude. Reasoning then comes back encrypted so it can be replayed.
         store=False,
         include=["reasoning.encrypted_content"],
         max_output_tokens=16000,
+        **extra,
     )
     latency_ms = (time.perf_counter() - start) * 1000
 
@@ -162,14 +192,15 @@ def call_openai(model, system, messages, tools):
         if item.type == "message":
             text.extend(part.text for part in item.content if part.type == "output_text")
         elif item.type == "reasoning":
-            reasoning.extend(part.text for part in item.summary)
+            reasoning.extend(part.text for part in item.summary or [])
         elif item.type == "function_call":
             # call_id, not id: the result must quote call_id to match.
             tool_calls.append({"id": item.call_id, "name": item.name, "args": json.loads(item.arguments)})
 
     usage = response.usage
     cache_read = usage.input_tokens_details.cached_tokens or 0
-    cache_write = usage.input_tokens_details.cache_write_tokens or 0
+    # OpenAI reports cache writes; other providers may leave the field out.
+    cache_write = getattr(usage.input_tokens_details, "cache_write_tokens", 0) or 0
     # input_tokens counts everything read, cached parts included.
     uncached = usage.input_tokens - cache_read - cache_write
     tokens_out = usage.output_tokens  # includes reasoning tokens
@@ -189,9 +220,64 @@ def call_openai(model, system, messages, tools):
     }
 
 
+def call_chat(model, system, messages, tools):
+    # Our own vLLM server; it speaks OpenAI's Chat Completions format.
+    client = openai.OpenAI(base_url=os.environ["VLLM_BASE_URL"], api_key=os.environ["VLLM_API_KEY"])
+    start = time.perf_counter()
+    # No temperature etc.: vLLM uses the model's own recommended defaults,
+    # as Haiku and Luna use theirs.
+    response = client.chat.completions.create(
+        model=model,
+        messages=to_chat_messages(system, messages),
+        tools=[{"type": "function", "function": {"name": t["name"], "description": t["description"],
+                                                 "parameters": t["params"]}} for t in tools],
+        max_tokens=16000,
+    )
+    latency_ms = (time.perf_counter() - start) * 1000
+
+    choice = response.choices[0]
+    message = choice.message
+    tool_calls = []
+    for call in message.tool_calls or []:
+        try:
+            args = json.loads(call.function.arguments)
+        except json.JSONDecodeError:
+            # Small models sometimes write broken JSON. Empty args make the
+            # game answer "invalid arguments" instead of crashing the run.
+            args = {}
+        tool_calls.append({"id": call.id, "name": call.function.name, "args": args})
+
+    # Replay only the answer and tool calls, not the thinking: Qwen's model
+    # card says past thinking should not be in the history.
+    raw = {"role": "assistant", "content": message.content or ""}
+    if message.tool_calls:
+        raw["tool_calls"] = [call.to_dict() for call in message.tool_calls]
+
+    # vLLM's reasoning parser puts the thinking in an extra field; its name
+    # changed between vLLM versions, so try both.
+    reasoning = getattr(message, "reasoning", None) or getattr(message, "reasoning_content", None) or ""
+    usage = response.usage
+    return {
+        "text": message.content or "",
+        "reasoning": reasoning,
+        "tool_calls": tool_calls,
+        "raw": raw,
+        "stop_reason": choice.finish_reason,
+        "tokens_in": usage.prompt_tokens,
+        "cache_read": 0,  # vLLM reuses cached prefixes but doesn't report it by default
+        "cache_write": 0,
+        "tokens_out": usage.completion_tokens,  # includes thinking tokens
+        "latency_ms": round(latency_ms),
+        # None: we pay per GPU hour, not per token (see cost_usd).
+        "cost_usd": cost_usd(model, usage.prompt_tokens, usage.completion_tokens),
+    }
+
+
 ADAPTERS = {
     "anthropic": call_anthropic,
     "openai": call_openai,
+    "xai": call_xai,
+    "vllm": call_chat,
 }
 
 
