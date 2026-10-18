@@ -12,6 +12,8 @@ steps, and act.
 The world is plain Python with no LLM inside, so every claim the model makes
 can be checked against the world's true state.
 
+**Read the story of v1 on Substack: [I left 4 AI models alone, one at a time, on a simulated Mars base](https://chandraskumar.substack.com/p/i-left-4-ai-models-alone-one-at-a)**
+
 ## v1 result: one model alone, 5 seeds each
 
 | Model | Rescued | Cost for 5 runs | Mean time per call |
