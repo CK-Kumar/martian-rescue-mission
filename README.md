@@ -21,8 +21,9 @@ can be checked against the world's true state.
 | GPT-6 Luna | 3/5 | $0.06 | 5.7 s |
 | Qwen3.5-9B (self-hosted, 1× H100) | 0/5 | ~$1.70 GPU time | 12.2 s |
 
-Same world, same seeds 1–5 for every model. Every run, with what each model
-did and why it died, is in [RESULTS.md](RESULTS.md).
+Same world, same seeds 1–5 for every model.
+
+**→ Every run, with what each model did and why it died: [RESULTS.md](RESULTS.md)**
 
 Read this as a first measurement, not a leaderboard: 5 seeds per model, one
 prompt, and the Grok runs had uncommitted model-calling code (the world and
@@ -164,7 +165,7 @@ To serve an open model yourself (vLLM on a rented GPU, SSH tunnel), see
   ```
 
 - Every run records the git commit and whether the code had uncommitted
-  changes (`dirty`), so each row in RESULTS.md can be reproduced with
+  changes (`dirty`), so each row in [RESULTS.md](RESULTS.md) can be reproduced with
   `git checkout <commit>`.
 
 Where each part of the code lives: [docs/layout.md](docs/layout.md).
@@ -177,7 +178,7 @@ Where each part of the code lives: [docs/layout.md](docs/layout.md).
 - This repo is public, answers included. Future models may be trained on it
   and *remember* the ice instead of reasoning their way to it. The planned
   check is the same world renamed (Moon or Antarctic base).
-- Run logs and the MLflow database are not in the repo yet; RESULTS.md has
+- Run logs and the MLflow database are not in the repo yet; [RESULTS.md](RESULTS.md) has
   the summaries.
 
 ## Next
